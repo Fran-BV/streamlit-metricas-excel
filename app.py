@@ -1,43 +1,46 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import plotly.express as px
 
-st.set_page_config(page_title="Métricas Dinámicas", layout="wide")
+st.set_page_config(page_title="Tu Copiloto de Métricas", layout="wide")
 
 st.title("📊 Tu Copiloto de Métricas en Excel")
-st.write("Sube un archivo Excel y genera gráficos automáticamente con prompts en lenguaje natural.")
 
-# Subida de archivo
-uploaded_file = st.file_uploader("Sube tu archivo Excel (.xlsx)", type="xlsx")
+uploaded_file = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
 
 if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-    df.columns = [col.strip() for col in df.columns]
-    
-    st.success("✅ Archivo cargado correctamente")
-    st.write("Vista previa de los primeros registros:")
-    st.dataframe(df.head())
+    try:
+        # Leer con encabezado en la fila 2, ignorando la fila 3
+        df = pd.read_excel(uploaded_file, header=1, skiprows=[2])
 
-    prompt = st.text_input("🧠 ¿Qué gráfico necesitas?", placeholder="Ej: Gráfico de tiempo promedio en progreso por Sprint")
+        # Limpiar columnas sin nombre
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
 
-    if prompt:
-        # Lógica simple (temporal): si en el prompt aparece "sprint" y "tiempo", hacemos gráfico básico
-        if "sprint" in prompt.lower() and "tiempo" in prompt.lower():
-            if "Sprint" in df.columns and "Time in Progress" in df.columns:
-                df_viz = df[['Sprint', 'Time in Progress']].dropna()
-                df_viz_grouped = df_viz.groupby('Sprint', as_index=False).mean()
+        st.success("✅ Archivo cargado correctamente")
+        st.subheader("📄 Vista previa de los datos")
+        st.dataframe(df)
 
-                chart = alt.Chart(df_viz_grouped).mark_bar().encode(
-                    x='Sprint:N',
-                    y='Time in Progress:Q',
-                    tooltip=['Sprint', 'Time in Progress']
-                ).properties(
-                    width=700,
-                    height=400,
-                    title='Tiempo promedio en progreso por Sprint'
-                )
-                st.altair_chart(chart)
-            else:
-                st.error("No se encontraron columnas llamadas 'Sprint' y 'Time in Progress'.")
-        else:
-            st.info("Esta versión MVP solo soporta el gráfico de tiempo por Sprint por ahora. Pronto se conectará con GPT para interpretar prompts más libres.")
+        # ========== GRÁFICOS PREDEFINIDOS ==========
+
+        st.subheader("📊 Gráficos Predefinidos")
+
+        # Gráfico de tareas por estado
+        if "Status" in df.columns:
+            status_counts = df["Status"].value_counts().reset_index()
+            fig = px.bar(status_counts, x="index", y="Status", labels={"index": "Estado", "Status": "Cantidad"})
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Gráfico de SP por sprint (si existe)
+        if "SP" in df.columns and "Sprint" in df.columns:
+            sprint_sp = df.groupby("Sprint")["SP"].sum().reset_index()
+            fig = px.bar(sprint_sp, x="Sprint", y="SP", title="SP por Sprint")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Promedio de "Time in Progress" por estado
+        if "Time in Progress" in df.columns and "Status" in df.columns:
+            time_avg = df.groupby("Status")["Time in Progress"].mean().reset_index()
+            fig = px.bar(time_avg, x="Status", y="Time in Progress", title="Tiempo promedio en progreso por Estado")
+            st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Error al procesar el archivo: {e}")
