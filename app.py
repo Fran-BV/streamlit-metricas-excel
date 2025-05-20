@@ -1,51 +1,60 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Tu Copiloto de Métricas", layout="wide")
-st.title("📊 Tu Copiloto de Métricas en Excel")
+st.set_page_config(page_title="Visualizador de Excel", layout="wide")
 
-uploaded_file = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
+st.title("📊 Visualizador de métricas desde Excel")
+
+# Cargar archivo Excel
+uploaded_file = st.file_uploader("Sube un archivo Excel (.xlsx)", type=["xlsx"])
 
 if uploaded_file:
     try:
-        # Leer el archivo Excel con encabezado en la fila 2 (índice 1) y omitir fila 3 (índice 2)
-        df = pd.read_excel(uploaded_file, header=1, skiprows=[2])
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]  # Eliminar columnas sin nombre
+        df = pd.read_excel(uploaded_file)
+        st.success("Archivo cargado correctamente ✅")
 
-        st.success("✅ Archivo cargado correctamente")
-        st.subheader("📄 Vista previa de los datos")
-        st.dataframe(df)
+        st.subheader("Vista previa de los datos")
+        st.dataframe(df, use_container_width=True)
 
-        st.subheader("📊 Gráficos Predefinidos")
+        # Selección de columnas para gráficas
+        numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
 
-        # Tareas por Estado
-        if "Status" in df.columns:
-            status_counts = df["Status"].value_counts().reset_index()
-            status_counts.columns = ["Estado", "Cantidad"]
-            fig1 = px.bar(status_counts, x="Estado", y="Cantidad", title="Tareas por Estado")
-            st.plotly_chart(fig1, use_container_width=True)
+        if numeric_columns:
+            st.subheader("Generar gráfico")
 
-        # Evolución de SP e Items por Sprint
-        if "Sprint" in df.columns and "SP" in df.columns:
-            df_sp = df[["Sprint", "SP"]].dropna()
-            df_sp["SP"] = pd.to_numeric(df_sp["SP"], errors="coerce")
-            sp_sum = df_sp.groupby("Sprint").agg(
-                Total_SP=("SP", "sum"),
-                Cantidad_Items=("SP", "count")
-            ).reset_index()
-            fig2 = px.bar(sp_sum, x="Sprint", y=["Total_SP", "Cantidad_Items"],
-                          title="Evolución de SP e Items por Sprint",
-                          barmode="group")
-            st.plotly_chart(fig2, use_container_width=True)
+            col1 = st.selectbox("Selecciona columna para eje X", df.columns, key="x")
+            col2 = st.selectbox("Selecciona columna para eje Y", numeric_columns, key="y")
 
-        # SP promedio por responsable
-        if "Responsable" in df.columns and "SP" in df.columns:
-            df_resp = df[["Responsable", "SP"]].dropna()
-            df_resp["SP"] = pd.to_numeric(df_resp["SP"], errors="coerce")
-            sp_avg = df_resp.groupby("Responsable").mean(numeric_only=True).reset_index()
-            fig3 = px.bar(sp_avg, x="Responsable", y="SP", title="SP Promedio por Responsable")
-            st.plotly_chart(fig3, use_container_width=True)
+            chart_type = st.radio("Tipo de gráfico", ["Línea", "Barras", "Pastel"])
 
+            fig, ax = plt.subplots()
+
+            if chart_type == "Línea":
+                ax.plot(df[col1], df[col2])
+                ax.set_xlabel(col1)
+                ax.set_ylabel(col2)
+                ax.set_title(f"{col2} vs {col1}")
+
+            elif chart_type == "Barras":
+                ax.bar(df[col1], df[col2])
+                ax.set_xlabel(col1)
+                ax.set_ylabel(col2)
+                ax.set_title(f"{col2} por {col1}")
+                plt.xticks(rotation=45)
+
+            elif chart_type == "Pastel":
+                if len(df[col2].unique()) <= 10:
+                    ax.pie(df[col2].value_counts(), labels=df[col2].value_counts().index, autopct="%1.1f%%")
+                    ax.set_title(f"Distribución de {col2}")
+                else:
+                    st.warning("Demasiados valores únicos para gráfico de pastel.")
+
+            st.pyplot(fig)
+
+        else:
+            st.warning("No se encontraron columnas numéricas en el archivo.")
     except Exception as e:
-        st.error(f"❌ Error al procesar el archivo: {e}")
+        st.error(f"Error al leer el archivo: {e}")
+else:
+    st.info("Por favor, sube un archivo Excel para comenzar.")
