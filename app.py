@@ -43,16 +43,15 @@ if uploaded_file:
             st.plotly_chart(fig, use_container_width=True)
 
         if "Time in Progress" in df.columns and "Status" in df.columns:
-    df["Time in Progress"] = pd.to_numeric(df["Time in Progress"], errors="coerce")
-    df_valid = df.dropna(subset=["Time in Progress"])  # Elimina filas con NaN en 'Time in Progress'
+            df["Time in Progress"] = pd.to_numeric(df["Time in Progress"], errors="coerce")
+            df_valid = df.dropna(subset=["Time in Progress"])  # Elimina filas con NaN en 'Time in Progress'
     
     if not df_valid.empty:  # Si hay datos válidos para calcular el promedio
-        time_avg = df_valid.groupby("Status")["Time in Progress"].mean().reset_index()
-        fig = px.bar(time_avg, x="Status", y="Time in Progress", title="Tiempo promedio en progreso por Estado")
-        st.plotly_chart(fig, use_container_width=True)
+            time_avg = df_valid.groupby("Status")["Time in Progress"].mean().reset_index()
+            fig = px.bar(time_avg, x="Status", y="Time in Progress", title="Tiempo promedio en progreso por Estado")
+            st.plotly_chart(fig, use_container_width=True)
     else:  # Si no hay datos válidos
-        st.warning("No hay datos válidos numéricos en 'Time in Progress' para calcular promedios.")
-
+            st.warning("No hay datos válidos numéricos en 'Time in Progress' para calcular promedios.")
 
         if "Sprint" in df.columns and "SP" in df.columns:
             sprint_data = df.groupby("Sprint").agg(
