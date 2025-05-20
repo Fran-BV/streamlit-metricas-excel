@@ -21,8 +21,6 @@ if uploaded_file:
         st.dataframe(df)
 
         # ========== GRÁFICOS PREDEFINIDOS ==========
-
-        # ========== GRÁFICOS PREDEFINIDOS ==========
 st.subheader("📊 Gráficos Predefinidos")
 
 # Gráfico de tareas por estado
@@ -50,3 +48,5 @@ if "Time in Progress" in df.columns and "Status" in df.columns:
 else:
     st.warning("⚠️ No se encontraron columnas 'Time in Progress' y 'Status'.")
     
+ except Exception as e:
+        st.error(f"❌ Error al procesar el archivo: {e}")
