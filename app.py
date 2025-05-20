@@ -12,33 +12,47 @@ if archivo:
     try:
         df = pd.read_excel(archivo)
 
-        columnas_requeridas = ["Sprint", "SP", "summary"]
+        # Limpiar nombres de columnas
+        df.columns = df.columns.str.strip().str.lower()
+
+        # Mapear nombres comunes a lo que necesitamos
+        columnas_alias = {
+            "sprint": "sprint",
+            "sp": "sp",
+            "story point": "sp",
+            "story points": "sp",
+            "summary": "summary",
+            "resumen": "summary",
+        }
+
+        # Crear nuevo DataFrame con nombres esperados
+        df = df.rename(columns={col: columnas_alias.get(col, col) for col in df.columns})
+
+        columnas_requeridas = ["sprint", "sp", "summary"]
         if not all(col in df.columns for col in columnas_requeridas):
             st.error(f"❌ Faltan columnas. Se requieren: {columnas_requeridas}")
+            st.write("Columnas encontradas:", df.columns.tolist())
             st.stop()
 
-        df["SP"] = pd.to_numeric(df["SP"], errors="coerce")
+        df["sp"] = pd.to_numeric(df["sp"], errors="coerce")
 
-        # Extraer fecha desde el nombre del Sprint si existe (últimos 8 dígitos del nombre)
         def extraer_fecha(sprint_name):
             match = re.search(r"(\d{8})$", str(sprint_name))
             return pd.to_datetime(match.group(1), format="%Y%m%d") if match else pd.NaT
 
-        df["Sprint_fecha"] = df["Sprint"].apply(extraer_fecha)
+        df["sprint_fecha"] = df["sprint"].apply(extraer_fecha)
 
-        # Agrupar por Sprint y resumir
-        resumen = df.groupby(["Sprint", "Sprint_fecha"]).agg(
-            SP_total=("SP", "sum"),
+        resumen = df.groupby(["sprint", "sprint_fecha"]).agg(
+            SP_total=("sp", "sum"),
             Items_total=("summary", "count")
         ).reset_index()
 
-        # Ordenar por la fecha del Sprint (si existe), y limitar a últimos N
-        resumen = resumen.sort_values(by="Sprint_fecha", ascending=True)
+        resumen = resumen.sort_values(by="sprint_fecha", ascending=True)
         resumen = resumen.tail(10)
 
         fig = px.bar(
             resumen,
-            x="Sprint",
+            x="sprint",
             y=["SP_total", "Items_total"],
             barmode="group",
             title="✅ Suma de SP e Ítems por Sprint",
