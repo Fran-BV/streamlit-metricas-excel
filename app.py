@@ -2,50 +2,68 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Tu Copiloto de Métricas", layout="wide")
-st.title("📊 Tu Copiloto de Métricas en Excel")
+st.set_page_config(layout="wide")
+st.title("📊 Dashboard de Métricas Ágiles")
 
-uploaded_file = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
+uploaded_file = st.file_uploader("Carga un archivo Excel", type=[".xlsx"])
 
 if uploaded_file:
     try:
-        # Leer el archivo Excel con encabezado en la fila 2 (índice 1) y omitir fila 3 (índice 2)
-        df = pd.read_excel(uploaded_file, header=1, skiprows=[2])
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]  # Eliminar columnas sin nombre
+        df = pd.read_excel(uploaded_file)
 
-        st.success("✅ Archivo cargado correctamente")
-        st.subheader("📄 Vista previa de los datos")
-        st.dataframe(df)
+        st.subheader("Vista previa de los datos")
+        st.dataframe(df.head())
 
-        st.subheader("📊 Gráficos Predefinidos")
+        # Detectar columnas numéricas
+        numeric_columns = df.select_dtypes(include=["number"]).columns.tolist()
+        if not numeric_columns:
+            st.warning("⚠️ No se encontraron columnas numéricas en el archivo.")
+        else:
+            # Gráfico 1: Evolución de SP e Items por Sprint (solo cerradas)
+            estados_cerrados = ["Done", "Cancelled", "Ready to deploy", "Resolved"]
+            df_filtrado_cerrados = df[df["Status"].isin(estados_cerrados)]
+            df_filtrado_cerrados["SP"] = pd.to_numeric(df_filtrado_cerrados["SP"], errors="coerce")
 
-        # Tareas por Estado
-        if "Status" in df.columns:
-            status_counts = df["Status"].value_counts().reset_index()
-            status_counts.columns = ["Estado", "Cantidad"]
-            fig1 = px.bar(status_counts, x="Estado", y="Cantidad", title="Tareas por Estado")
-            st.plotly_chart(fig1, use_container_width=True)
+            if "Sprint" in df.columns and "SP" in df.columns and "summary" in df.columns:
+                evolucion = df_filtrado_cerrados.groupby("Sprint").agg(
+                    SP_total=("SP", "sum"),
+                    Items_total=("summary", "count")
+                ).reset_index()
 
-        # Evolución de SP e Items por Sprint
-        if "Sprint" in df.columns and "SP" in df.columns:
-            df_sp = df[["Sprint", "SP"]].dropna()
-            df_sp["SP"] = pd.to_numeric(df_sp["SP"], errors="coerce")
-            sp_sum = df_sp.groupby("Sprint").agg(
-                Total_SP=("SP", "sum"),
-                Cantidad_Items=("SP", "count")
-            ).reset_index()
-            fig2 = px.bar(sp_sum, x="Sprint", y=["Total_SP", "Cantidad_Items"],
-                          title="Evolución de SP e Items por Sprint",
-                          barmode="group")
-            st.plotly_chart(fig2, use_container_width=True)
+                fig1 = px.bar(
+                    evolucion,
+                    x="Sprint",
+                    y=["SP_total", "Items_total"],
+                    barmode="group",
+                    title="✅ SP e Items completados por Sprint (solo tareas cerradas)"
+                )
+                st.plotly_chart(fig1, use_container_width=True)
 
-        # SP promedio por responsable
-        if "Responsable" in df.columns and "SP" in df.columns:
-            df_resp = df[["Responsable", "SP"]].dropna()
-            df_resp["SP"] = pd.to_numeric(df_resp["SP"], errors="coerce")
-            sp_avg = df_resp.groupby("Responsable").mean(numeric_only=True).reset_index()
-            fig3 = px.bar(sp_avg, x="Responsable", y="SP", title="SP Promedio por Responsable")
-            st.plotly_chart(fig3, use_container_width=True)
+            # Gráfico 2: Historias Empezadas vs Terminadas por Sprint
+            estados_empezadas = ["Done", "Cancelled", "Ready to deploy", "Resolved", "In Progress", "QA", "Code review"]
+            estados_terminadas = ["Done", "Cancelled", "Ready to deploy", "Resolved"]
+
+            df_empezadas = df[df["Status"].isin(estados_empezadas)]
+            df_terminadas = df[df["Status"].isin(estados_terminadas)]
+
+            if "Sprint" in df.columns and "summary" in df.columns:
+                empezadas_vs_terminadas = pd.DataFrame({
+                    "Sprint": sorted(df["Sprint"].dropna().unique()),
+                    "Empezadas": df_empezadas.groupby("Sprint")["summary"].count(),
+                    "Terminadas": df_terminadas.groupby("Sprint")["summary"].count()
+                }).fillna(0).reset_index()
+
+                fig2 = px.bar(
+                    empezadas_vs_terminadas,
+                    x="Sprint",
+                    y=["Empezadas", "Terminadas"],
+                    barmode="group",
+                    title="📈 Historias Empezadas vs Terminadas por Sprint"
+                )
+                st.plotly_chart(fig2, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo: {e}")
+else:
+    st.info("Por favor, carga un archivo Excel para comenzar.")
+    
