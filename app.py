@@ -1,6 +1,5 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import streamlit as st
 
 st.set_page_config(layout="wide")
@@ -14,62 +13,77 @@ if archivo:
     df = pd.read_excel(archivo)
     df.columns = df.columns.str.strip().str.lower()  # Quitar espacios, pasar a minúsculas
 
-    # Renombrar columnas clave
-    df = df.rename(columns={
-        'summary': 'summary',
-        'sp': 'sp',
-        'sprint': 'sprint',
-        'cycle time': 'cycle time',
-        'status': 'status'  # por si se usa más adelante
-    })
-
     # Mostrar columnas detectadas
     st.write("Columnas detectadas:", df.columns.tolist())
 
-    # Mostrar preview
+    # Mostrar vista previa
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
 
-    # Sidebar - Configuración dinámica
+    # Sidebar - Configuración del gráfico
     st.sidebar.header("🎛️ Configuración del gráfico")
 
-    # Tipo de gráfico
     tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["📈 Líneas", "📊 Barras"])
+    columnas = df.columns.tolist()
+    columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas)
+    columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas)
 
-    # Columnas categóricas para eje X
-    columnas_cat = [col for col in df.columns if df[col].dtype == 'object']
-    columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas_cat)
+    # Sidebar - Filtros
+    st.sidebar.header("🔎 Filtros")
 
-    # Columnas numéricas para eje Y
-    columnas_num = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
-    columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas_num, default=columnas_num[:1])
+    # Filtro por Sprint
+    if 'sprint' in df.columns:
+        sprints = df['sprint'].dropna().unique().tolist()
+        sprints_seleccionados = st.sidebar.multiselect("Filtrar por Sprint", sprints)
+        if sprints_seleccionados:
+            df = df[df['sprint'].isin(sprints_seleccionados)]
 
+    # Filtro por Status
+    if 'status' in df.columns:
+        status_vals = df['status'].dropna().unique().tolist()
+        status_seleccionados = st.sidebar.multiselect("Filtrar por Status", status_vals)
+        if status_seleccionados:
+            df = df[df['status'].isin(status_seleccionados)]
+
+    # Filtro por Assignee
+    if 'assignee' in df.columns:
+        assignees = df['assignee'].dropna().unique().tolist()
+        assignees_seleccionados = st.sidebar.multiselect("Filtrar por Assignee", assignees)
+        if assignees_seleccionados:
+            df = df[df['assignee'].isin(assignees_seleccionados)]
+
+    # Validar selección para graficar
     if columna_x and columnas_y:
-        st.subheader(f"📊 Gráfico: {tipo_grafico} - {', '.join(columnas_y)} por {columna_x}")
+        st.subheader(f"{tipo_grafico}: {' y '.join(columnas_y)} por {columna_x}")
 
-        df_grouped = df.groupby(columna_x)[columnas_y].mean().reset_index()
+        # Agrupación automática
+        agrupaciones = {}
+        for col in columnas_y:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                agrupaciones[col] = 'sum'
+            else:
+                agrupaciones[col] = 'count'
 
+        df_grouped = df.groupby(columna_x).agg(agrupaciones).reset_index()
+
+        # Mostrar resumen
+        st.write("📋 Datos agrupados:")
+        st.dataframe(df_grouped)
+
+        # Crear gráfico
         fig, ax = plt.subplots(figsize=(10, 5))
 
-        if tipo_grafico == "📈 Líneas":
-            for col in columnas_y:
+        for col in columnas_y:
+            if tipo_grafico == "📈 Líneas":
                 ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
-        else:
-            ancho = 0.8 / len(columnas_y)  # para que no se solapen
-            for i, col in enumerate(columnas_y):
-                ax.bar(
-                    x=[x + ancho * i for x in range(len(df_grouped))],
-                    height=df_grouped[col],
-                    width=ancho,
-                    label=col,
-                    align='edge'
-                )
-            ax.set_xticks([x + ancho * (len(columnas_y)/2) for x in range(len(df_grouped))])
-            ax.set_xticklabels(df_grouped[columna_x])
+            else:
+                ax.bar(df_grouped[columna_x], df_grouped[col], label=col)
 
         ax.set_xlabel(columna_x.capitalize())
         ax.set_ylabel("Valor")
+        ax.set_title(f"{', '.join(columnas_y)} por {columna_x}")
+        ax.tick_params(axis='x', rotation=45)
         ax.legend()
         st.pyplot(fig)
     else:
-        st.info("Selecciona una columna para el eje X y al menos una columna numérica para el eje Y.")
+        st.info("Selecciona una columna para eje X y al menos una para eje Y.")
