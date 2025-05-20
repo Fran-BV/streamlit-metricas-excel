@@ -5,13 +5,19 @@ import streamlit as st
 st.set_page_config(layout="wide")
 st.title("📊 Dashboard de Métricas Ágiles")
 
+# Sidebar: selección de gráficos (ahora SIEMPRE visible)
+st.sidebar.header("📌 Selecciona gráficos a mostrar")
+mostrar_grafico_1 = st.sidebar.checkbox("📈 SP e ítems por Sprint", value=True)
+mostrar_grafico_2 = st.sidebar.checkbox("📉 Tiempo promedio por ítem", value=False)
+# Puedes seguir agregando más checkboxes aquí
+
 # Cargar archivo
 archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 
 if archivo:
     # Leer Excel y limpiar nombres de columnas
     df = pd.read_excel(archivo)
-    df.columns = df.columns.str.strip().str.lower()  # Quitar espacios, pasar a minúsculas
+    df.columns = df.columns.str.strip().str.lower()
 
     # Mostrar columnas detectadas
     st.write("Columnas detectadas:", df.columns.tolist())
@@ -21,7 +27,7 @@ if archivo:
         'summary': 'summary',
         'sp': 'sp',
         'sprint': 'sprint',
-        'cycle time': 'cycle time'  # Si esta columna está presente
+        'cycle time': 'cycle time'
     })
 
     # Verificar columnas requeridas
@@ -34,12 +40,6 @@ if archivo:
     # Mostrar DataFrame
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
-
-    # Sidebar: selección de gráficos
-    st.sidebar.header("📌 Selecciona gráficos a mostrar")
-    mostrar_grafico_1 = st.sidebar.checkbox("📈 SP e ítems por Sprint", value=True)
-    mostrar_grafico_2 = st.sidebar.checkbox("📉 Tiempo promedio por ítem", value=False)
-    # Puedes seguir agregando más checkboxes aquí
 
     # --- Gráfico 1: SP e ítems por Sprint ---
     if mostrar_grafico_1:
@@ -74,7 +74,7 @@ if archivo:
             st.subheader("📉 Gráfico: Tiempo promedio por ítem (Cycle TIME)")
 
             df_ct = df.groupby('sprint')['cycle time'].mean().reset_index()
-            df_ct = df_ct.tail(5)  # Últimos 5 sprints
+            df_ct = df_ct.tail(5)
 
             fig, ax = plt.subplots(figsize=(10, 5))
             ax.plot(df_ct['sprint'], df_ct['cycle time'], marker='o', color='green')
