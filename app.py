@@ -16,28 +16,38 @@ if uploaded_file:
         st.subheader("📄 Vista previa de los datos")
         st.dataframe(df)
 
+        st.subheader("📊 Filtros")
+        if "Sprint" in df.columns:
+            sprint_options = df["Sprint"].dropna().unique().tolist()
+            selected_sprints = st.multiselect("Selecciona uno o más Sprints", options=sprint_options, default=sprint_options)
+            df = df[df["Sprint"].isin(selected_sprints)]
+
+        if "Created" in df.columns or "Date" in df.columns:
+            date_column = "Created" if "Created" in df.columns else "Date"
+            df[date_column] = pd.to_datetime(df[date_column], errors='coerce')
+            min_date = df[date_column].min()
+            max_date = df[date_column].max()
+            start_date, end_date = st.date_input("Filtrar por rango de fechas", [min_date, max_date])
+            df = df[(df[date_column] >= pd.to_datetime(start_date)) & (df[date_column] <= pd.to_datetime(end_date))]
+
         st.subheader("📊 Gráficos Predefinidos")
 
-        # Gráfico de tareas por estado
         if "Status" in df.columns:
             status_counts = df["Status"].value_counts().reset_index()
             fig = px.bar(status_counts, x="index", y="Status", labels={"index": "Estado", "Status": "Cantidad"})
             st.plotly_chart(fig, use_container_width=True)
 
-        # SP por Sprint
         if "SP" in df.columns and "Sprint" in df.columns:
             sprint_sp = df.groupby("Sprint")["SP"].sum().reset_index()
             fig = px.bar(sprint_sp, x="Sprint", y="SP", title="SP por Sprint")
             st.plotly_chart(fig, use_container_width=True)
 
-        # Tiempo promedio en progreso
         if "Time in Progress" in df.columns and "Status" in df.columns:
             df["Time in Progress"] = pd.to_numeric(df["Time in Progress"], errors="coerce")
             time_avg = df.groupby("Status")["Time in Progress"].mean().reset_index()
             fig = px.bar(time_avg, x="Status", y="Time in Progress", title="Tiempo promedio en progreso por Estado")
             st.plotly_chart(fig, use_container_width=True)
 
-        # SP e Ítems por Sprint
         if "Sprint" in df.columns and "SP" in df.columns:
             sprint_data = df.groupby("Sprint").agg(
                 SP_total=("SP", "sum"),
@@ -48,7 +58,6 @@ if uploaded_file:
                           title="Evolución de SP e Ítems por Sprint")
             st.plotly_chart(fig, use_container_width=True)
 
-        # Historias empezadas vs terminadas
         estados_finales = ["Done", "Cancelled", "Ready to deploy", "Resolved"]
         if "Sprint" in df.columns and "Status" in df.columns and "Summary" in df.columns:
             historias = df.groupby("Sprint").agg(
@@ -62,3 +71,4 @@ if uploaded_file:
 
     except Exception as e:
         st.error(f"❌ Error al procesar el archivo: {e}")
+
