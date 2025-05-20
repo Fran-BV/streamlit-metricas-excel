@@ -1,15 +1,10 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 import streamlit as st
 
 st.set_page_config(layout="wide")
-st.title("📊 Dashboard de Métricas Ágiles")
-
-# Sidebar: selección de gráficos (ahora SIEMPRE visible)
-st.sidebar.header("📌 Selecciona gráficos a mostrar")
-mostrar_grafico_1 = st.sidebar.checkbox("📈 SP e ítems por Sprint", value=True)
-mostrar_grafico_2 = st.sidebar.checkbox("📉 Tiempo promedio por ítem", value=False)
-# Puedes seguir agregando más checkboxes aquí
+st.title("📊 Dashboard de Métricas Interactivo")
 
 # Cargar archivo
 archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
@@ -17,70 +12,64 @@ archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 if archivo:
     # Leer Excel y limpiar nombres de columnas
     df = pd.read_excel(archivo)
-    df.columns = df.columns.str.strip().str.lower()
+    df.columns = df.columns.str.strip().str.lower()  # Quitar espacios, pasar a minúsculas
 
-    # Mostrar columnas detectadas
-    st.write("Columnas detectadas:", df.columns.tolist())
-
-    # Renombrar columnas si es necesario
+    # Renombrar columnas clave
     df = df.rename(columns={
         'summary': 'summary',
         'sp': 'sp',
         'sprint': 'sprint',
-        'cycle time': 'cycle time'
+        'cycle time': 'cycle time',
+        'status': 'status'  # por si se usa más adelante
     })
 
-    # Verificar columnas requeridas
-    requeridas = ['sprint', 'sp', 'summary']
-    faltantes = [col for col in requeridas if col not in df.columns]
-    if faltantes:
-        st.error(f"❌ Faltan columnas requeridas: {faltantes}")
-        st.stop()
+    # Mostrar columnas detectadas
+    st.write("Columnas detectadas:", df.columns.tolist())
 
-    # Mostrar DataFrame
+    # Mostrar preview
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
 
-    # --- Gráfico 1: SP e ítems por Sprint ---
-    if mostrar_grafico_1:
-        st.subheader("📈 Gráfico: SP e ítems por Sprint")
+    # Sidebar - Configuración dinámica
+    st.sidebar.header("🎛️ Configuración del gráfico")
 
-        df_grouped = df.groupby('sprint').agg({
-            'sp': 'sum',
-            'summary': 'count'
-        }).reset_index()
-        df_grouped = df_grouped.rename(columns={'sp': 'Total SP', 'summary': 'Cantidad de ítems'})
+    # Tipo de gráfico
+    tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["📈 Líneas", "📊 Barras"])
 
-        # Limitar a los últimos 5 sprints
-        ultimos_sprints = df_grouped.tail(5)
+    # Columnas categóricas para eje X
+    columnas_cat = [col for col in df.columns if df[col].dtype == 'object']
+    columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas_cat)
 
-        fig, ax1 = plt.subplots(figsize=(10, 5))
-        ax2 = ax1.twinx()
+    # Columnas numéricas para eje Y
+    columnas_num = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas_num, default=columnas_num[:1])
 
-        ax1.bar(ultimos_sprints['sprint'], ultimos_sprints['Total SP'], color='skyblue', label='Total SP')
-        ax2.plot(ultimos_sprints['sprint'], ultimos_sprints['Cantidad de ítems'], color='orange', marker='o', label='Ítems')
+    if columna_x and columnas_y:
+        st.subheader(f"📊 Gráfico: {tipo_grafico} - {', '.join(columnas_y)} por {columna_x}")
 
-        ax1.set_xlabel("Sprint")
-        ax1.set_ylabel("Total SP", color='skyblue')
-        ax2.set_ylabel("Cantidad de Ítems", color='orange')
-        fig.tight_layout()
-        st.pyplot(fig)
+        df_grouped = df.groupby(columna_x)[columnas_y].mean().reset_index()
 
-    # --- Gráfico 2: Tiempo promedio por ítem (Cycle Time) ---
-    if mostrar_grafico_2:
-        if 'cycle time' not in df.columns:
-            st.warning("⚠️ La columna 'Cycle TIME' no fue encontrada en el archivo.")
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+        if tipo_grafico == "📈 Líneas":
+            for col in columnas_y:
+                ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
         else:
-            st.subheader("📉 Gráfico: Tiempo promedio por ítem (Cycle TIME)")
+            ancho = 0.8 / len(columnas_y)  # para que no se solapen
+            for i, col in enumerate(columnas_y):
+                ax.bar(
+                    x=[x + ancho * i for x in range(len(df_grouped))],
+                    height=df_grouped[col],
+                    width=ancho,
+                    label=col,
+                    align='edge'
+                )
+            ax.set_xticks([x + ancho * (len(columnas_y)/2) for x in range(len(df_grouped))])
+            ax.set_xticklabels(df_grouped[columna_x])
 
-            df_ct = df.groupby('sprint')['cycle time'].mean().reset_index()
-            df_ct = df_ct.tail(5)
-
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(df_ct['sprint'], df_ct['cycle time'], marker='o', color='green')
-            ax.set_xlabel("Sprint")
-            ax.set_ylabel("Tiempo promedio (Cycle TIME)")
-            ax.set_title("Cycle TIME promedio por Sprint")
-            st.pyplot(fig)
-
-    # Puedes seguir agregando más bloques `if mostrar_grafico_X:` aquí
+        ax.set_xlabel(columna_x.capitalize())
+        ax.set_ylabel("Valor")
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        st.info("Selecciona una columna para el eje X y al menos una columna numérica para el eje Y.")
