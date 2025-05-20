@@ -34,7 +34,9 @@ if uploaded_file:
 
         if "Status" in df.columns:
             status_counts = df["Status"].value_counts().reset_index()
-            fig = px.bar(status_counts, x="index", y="Status", labels={"index": "Estado", "Status": "Cantidad"})
+            status_counts.columns = ['Status', 'count']  # Renombrar las columnas para mayor claridad
+
+            fig = px.bar(status_counts, x="Status", y="count", labels={"Status": "Estado", "count": "Cantidad"})
             st.plotly_chart(fig, use_container_width=True)
 
         if "SP" in df.columns and "Sprint" in df.columns:
