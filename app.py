@@ -11,25 +11,39 @@ archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 if archivo:
     # Leer Excel y limpiar nombres de columnas
     df = pd.read_excel(archivo)
-    df.columns = df.columns.str.strip().str.lower()  # Quitar espacios, pasar a minúsculas
+    df.columns = df.columns.str.strip().str.lower()  # Normalizar nombres
 
-    # Mostrar columnas detectadas
-    st.write("Columnas detectadas:", df.columns.tolist())
+    # Renombrar columnas comunes para asegurar compatibilidad
+    df = df.rename(columns={
+        'sprint name': 'sprint',
+        'sprint': 'sprint',
+        'status': 'status',
+        'assignee': 'assignee',
+        'sp': 'sp',
+        'summary': 'summary',
+        'cycle time': 'cycle time'
+    })
 
-    # Mostrar vista previa
+    # Mostrar columnas para verificar
+    st.write("📋 Columnas detectadas:", df.columns.tolist())
+
+    # Vista previa de datos
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
 
-    # Sidebar - Configuración del gráfico
+    # === SIDEBAR ===
     st.sidebar.header("🎛️ Configuración del gráfico")
 
+    # Tipo de gráfico
     tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["📈 Líneas", "📊 Barras"])
+
+    # Columnas disponibles
     columnas = df.columns.tolist()
     columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas)
     columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas)
 
-    # Sidebar - Filtros
-    st.sidebar.header("🔎 Filtros")
+    # Filtros
+    st.sidebar.header("🔍 Filtros")
 
     # Filtro por Sprint
     if 'sprint' in df.columns:
@@ -52,11 +66,11 @@ if archivo:
         if assignees_seleccionados:
             df = df[df['assignee'].isin(assignees_seleccionados)]
 
-    # Validar selección para graficar
+    # === GRÁFICO ===
     if columna_x and columnas_y:
         st.subheader(f"{tipo_grafico}: {' y '.join(columnas_y)} por {columna_x}")
 
-        # Agrupación automática
+        # Agrupación automática según el tipo de dato
         agrupaciones = {}
         for col in columnas_y:
             if pd.api.types.is_numeric_dtype(df[col]):
@@ -66,7 +80,7 @@ if archivo:
 
         df_grouped = df.groupby(columna_x).agg(agrupaciones).reset_index()
 
-        # Mostrar resumen
+        # Mostrar datos agrupados
         st.write("📋 Datos agrupados:")
         st.dataframe(df_grouped)
 
