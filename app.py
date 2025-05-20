@@ -1,73 +1,63 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import re
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Gráfico de SP e Ítems", layout="centered")
-st.title("📊 SP e Ítems por Sprint")
+st.set_page_config(layout="wide")
+st.title("📊 Suma de SP e Ítems por Sprint")
 
-archivo = st.file_uploader("📂 Sube tu archivo Excel", type=["xlsx"])
+# Cargar archivo
+archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 
 if archivo:
-    try:
-        df = pd.read_excel(archivo)
+    # Leer Excel y limpiar nombres de columnas
+    df = pd.read_excel(archivo)
+    df.columns = df.columns.str.strip().str.lower()  # Quitar espacios, pasar a minúsculas
 
-        # Limpiar nombres de columnas
-        df.columns = df.columns.str.strip().str.lower()
+    # Mostrar columnas detectadas
+    st.write("Columnas detectadas:", df.columns.tolist())
 
-        # Mapear nombres comunes a lo que necesitamos
-        columnas_alias = {
-            "sprint": "sprint",
-            "sp": "sp",
-            "story point": "sp",
-            "story points": "sp",
-            "summary": "summary",
-            "resumen": "summary",
-        }
+    # Renombrar columnas si es necesario
+    df = df.rename(columns={
+        'summary': 'summary',
+        'sp': 'sp',
+        'sprint': 'sprint'
+    })
 
-        # Crear nuevo DataFrame con nombres esperados
-        df = df.rename(columns={col: columnas_alias.get(col, col) for col in df.columns})
+    # Verificar columnas requeridas
+    requeridas = ['sprint', 'sp', 'summary']
+    faltantes = [col for col in requeridas if col not in df.columns]
+    if faltantes:
+        st.error(f"❌ Faltan columnas requeridas: {faltantes}")
+        st.stop()
 
-        columnas_requeridas = ["sprint", "sp", "summary"]
-        if not all(col in df.columns for col in columnas_requeridas):
-            st.error(f"❌ Faltan columnas. Se requieren: {columnas_requeridas}")
-            st.write("Columnas encontradas:", df.columns.tolist())
-            st.stop()
+    # Mostrar DataFrame
+    st.subheader("Vista previa de los datos")
+    st.dataframe(df)
 
-        df["sp"] = pd.to_numeric(df["sp"], errors="coerce")
+    # Agrupar datos por Sprint
+    df_grouped = df.groupby('sprint').agg({
+        'sp': 'sum',
+        'summary': 'count'
+    }).reset_index()
+    df_grouped = df_grouped.rename(columns={'sp': 'Total SP', 'summary': 'Cantidad de ítems'})
 
-        def extraer_fecha(sprint_name):
-            match = re.search(r"(\d{8})$", str(sprint_name))
-            return pd.to_datetime(match.group(1), format="%Y%m%d") if match else pd.NaT
+    # Mostrar agrupación
+    st.subheader("Resumen por Sprint")
+    st.dataframe(df_grouped)
 
-        df["sprint_fecha"] = df["sprint"].apply(extraer_fecha)
+    # Limitar a los últimos 5 sprints
+    ultimos_sprints = df_grouped.tail(5)
 
-        resumen = df.groupby(["sprint", "sprint_fecha"]).agg(
-            SP_total=("sp", "sum"),
-            Items_total=("summary", "count")
-        ).reset_index()
+    # Mostrar gráfico
+    st.subheader("📈 Gráfico: SP e ítems por Sprint")
+    fig, ax1 = plt.subplots(figsize=(10, 5))
 
-        resumen = resumen.sort_values(by="sprint_fecha", ascending=True)
-        resumen = resumen.tail(10)
+    ax2 = ax1.twinx()
+    ax1.bar(ultimos_sprints['sprint'], ultimos_sprints['Total SP'], color='skyblue', label='Total SP')
+    ax2.plot(ultimos_sprints['sprint'], ultimos_sprints['Cantidad de ítems'], color='orange', marker='o', label='Ítems')
 
-        fig = px.bar(
-            resumen,
-            x="sprint",
-            y=["SP_total", "Items_total"],
-            barmode="group",
-            title="✅ Suma de SP e Ítems por Sprint",
-            height=400
-        )
-        fig.update_layout(
-            xaxis_title="Sprint",
-            yaxis_title="Cantidad",
-            legend_title="Métrica",
-            margin=dict(l=40, r=40, t=60, b=40)
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"❌ Error al procesar el archivo: {e}")
-else:
-    st.info("⬆️ Sube un archivo Excel para comenzar.")
+    ax1.set_xlabel("Sprint")
+    ax1.set_ylabel("Total SP", color='skyblue')
+    ax2.set_ylabel("Cantidad de Ítems", color='orange')
+    fig.tight_layout()
+    st.pyplot(fig)
