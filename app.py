@@ -4,7 +4,7 @@ import streamlit as st
 import io
 
 st.set_page_config(layout="wide")
-st.title("📊 Dashboard de Métricas Interactivo")
+st.title("📊 Dashboard de Métricas Interactivo (Multi Gráficos)")
 
 archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 
@@ -25,13 +25,7 @@ if archivo:
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
 
-    st.sidebar.header("🎛️ Configuración del gráfico")
-    tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["📈 Líneas", "📊 Barras"])
-    columnas = df.columns.tolist()
-    columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas)
-    columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas)
-
-    st.sidebar.header("🔍 Filtros")
+    st.sidebar.header("🔍 Filtros generales")
     if 'sprint' in df.columns:
         sprints = df['sprint'].dropna().unique().tolist()
         sprints_seleccionados = st.sidebar.multiselect("Filtrar por Sprint", sprints)
@@ -48,46 +42,52 @@ if archivo:
         if assignees_seleccionados:
             df = df[df['assignee'].isin(assignees_seleccionados)]
 
-    if columna_x and columnas_y:
-        st.subheader(f"{tipo_grafico}: {' y '.join(columnas_y)} por {columna_x}")
+    st.sidebar.header("🎛️ Configuración de gráficos")
+    num_graficos = st.sidebar.slider("¿Cuántos gráficos quieres ver?", 1, 3, 1)
 
-        # Agregamos: suma si es numérica, conteo si no
-        agregaciones = {}
-        for col in columnas_y:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                agregaciones[col] = 'sum'
-            else:
-                agregaciones[col] = lambda x: x.notna().count()
+    for i in range(num_graficos):
+        st.subheader(f"Gráfico {i+1}")
+        st.sidebar.markdown(f"### 🎨 Gráfico {i+1}")
+        tipo_grafico = st.sidebar.selectbox(f"Tipo de gráfico {i+1}", ["📈 Líneas", "📊 Barras"], key=f"tipo_{i}")
+        columna_x = st.sidebar.selectbox(f"Columna X {i+1}", df.columns.tolist(), key=f"x_{i}")
+        columnas_y = st.sidebar.multiselect(f"Columnas Y {i+1}", df.columns.tolist(), key=f"y_{i}")
 
-        df_grouped = df.groupby(columna_x).agg(agregaciones).reset_index()
+        if columna_x and columnas_y:
+            agregaciones = {}
+            for col in columnas_y:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    agregaciones[col] = 'sum'
+                else:
+                    agregaciones[col] = lambda x: x.notna().count()
 
-        st.write("📋 Datos agrupados:")
-        st.dataframe(df_grouped)
+            df_grouped = df.groupby(columna_x).agg(agregaciones).reset_index()
 
-        # Graficar
-        fig, ax = plt.subplots(figsize=(10, 5))
-        for col in columnas_y:
-            if tipo_grafico == "📈 Líneas":
-                ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
-            else:
-                ax.bar(df_grouped[columna_x], df_grouped[col], label=col)
+            st.write(f"📋 Datos agrupados para Gráfico {i+1}:")
+            st.dataframe(df_grouped)
 
-        ax.set_xlabel(columna_x.capitalize())
-        ax.set_ylabel("Valor")
-        ax.set_title(f"{', '.join(columnas_y)} por {columna_x}")
-        ax.tick_params(axis='x', rotation=45)
-        ax.legend()
-        st.pyplot(fig)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            for col in columnas_y:
+                if tipo_grafico == "📈 Líneas":
+                    ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
+                else:
+                    ax.bar(df_grouped[columna_x], df_grouped[col], label=col)
 
-        buf = io.BytesIO()
-        fig.savefig(buf, format="pdf")
-        buf.seek(0)
+            ax.set_xlabel(columna_x.capitalize())
+            ax.set_ylabel("Valor")
+            ax.set_title(f"{', '.join(columnas_y)} por {columna_x}")
+            ax.tick_params(axis='x', rotation=45)
+            ax.legend()
+            st.pyplot(fig)
 
-        st.download_button(
-            label="📥 Descargar gráfico como PDF",
-            data=buf,
-            file_name="grafico_dashboard.pdf",
-            mime="application/pdf"
-        )
-    else:
-        st.info("Selecciona una columna para eje X y al menos una para eje Y.")
+            buf = io.BytesIO()
+            fig.savefig(buf, format="pdf")
+            buf.seek(0)
+
+            st.download_button(
+                label=f"📥 Descargar gráfico {i+1} como PDF",
+                data=buf,
+                file_name=f"grafico_{i+1}.pdf",
+                mime="application/pdf"
+            )
+        else:
+            st.info(f"Selecciona X y Y para el gráfico {i+1}.")
