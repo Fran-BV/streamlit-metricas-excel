@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import streamlit as st
+import io
 
 st.set_page_config(layout="wide")
 st.title("📊 Dashboard de Métricas Interactivo")
@@ -10,9 +10,11 @@ st.title("📊 Dashboard de Métricas Interactivo")
 archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
 
 if archivo:
+    # Leer Excel y limpiar nombres de columnas
     df = pd.read_excel(archivo)
-    df.columns = df.columns.str.strip().str.lower()
+    df.columns = df.columns.str.strip().str.lower()  # Normalizar nombres
 
+    # Renombrar columnas comunes para asegurar compatibilidad
     df = df.rename(columns={
         'sprint name': 'sprint',
         'sprint': 'sprint',
@@ -23,106 +25,90 @@ if archivo:
         'cycle time': 'cycle time'
     })
 
+    # Mostrar columnas para verificar
     st.write("📋 Columnas detectadas:", df.columns.tolist())
+
+    # Vista previa de datos
     st.subheader("Vista previa de los datos")
     st.dataframe(df)
 
-    # Filtros comunes
-    st.sidebar.header("🔍 Filtros globales")
+    # === SIDEBAR ===
+    st.sidebar.header("🎛️ Configuración del gráfico")
+
+    # Tipo de gráfico
+    tipo_grafico = st.sidebar.selectbox("Tipo de gráfico", ["📈 Líneas", "📊 Barras"])
+
+    # Columnas disponibles
+    columnas = df.columns.tolist()
+    columna_x = st.sidebar.selectbox("Columna para eje X (agrupación)", columnas)
+    columnas_y = st.sidebar.multiselect("Columnas para eje Y", columnas)
+
+    # Filtros
+    st.sidebar.header("🔍 Filtros")
 
     if 'sprint' in df.columns:
-        sprints_seleccionados = st.sidebar.multiselect("Filtrar por Sprint", df['sprint'].dropna().unique())
+        sprints = df['sprint'].dropna().unique().tolist()
+        sprints_seleccionados = st.sidebar.multiselect("Filtrar por Sprint", sprints)
         if sprints_seleccionados:
             df = df[df['sprint'].isin(sprints_seleccionados)]
 
     if 'status' in df.columns:
-        status_seleccionados = st.sidebar.multiselect("Filtrar por Status", df['status'].dropna().unique())
+        status_vals = df['status'].dropna().unique().tolist()
+        status_seleccionados = st.sidebar.multiselect("Filtrar por Status", status_vals)
         if status_seleccionados:
             df = df[df['status'].isin(status_seleccionados)]
 
     if 'assignee' in df.columns:
-        assignees_seleccionados = st.sidebar.multiselect("Filtrar por Assignee", df['assignee'].dropna().unique())
+        assignees = df['assignee'].dropna().unique().tolist()
+        assignees_seleccionados = st.sidebar.multiselect("Filtrar por Assignee", assignees)
         if assignees_seleccionados:
             df = df[df['assignee'].isin(assignees_seleccionados)]
 
-    # Cantidad de gráficos
-    st.sidebar.header("🎨 Configuración de gráficos")
-    num_graficos = st.sidebar.number_input("¿Cuántos gráficos quieres mostrar?", min_value=1, max_value=5, value=2)
+    # === GRÁFICO ===
+    if columna_x and columnas_y:
+        st.subheader(f"{tipo_grafico}: {' y '.join(columnas_y)} por {columna_x}")
 
-    for i in range(num_graficos):
-        st.markdown(f"## 📊 Gráfico {i + 1}")
-        col1, col2 = st.columns([3, 1])
+        # Agrupación
+        agrupaciones = {}
+        for col in columnas_y:
+            if col == "summary":
+                agrupaciones[col] = pd.NamedAgg(column=col, aggfunc=lambda x: x.nunique())
+            elif pd.api.types.is_numeric_dtype(df[col]):
+                agrupaciones[col] = pd.NamedAgg(column=col, aggfunc="sum")
+            else:
+                agrupaciones[col] = pd.NamedAgg(column=col, aggfunc="count")
 
-        with col2:
-            tipo = st.selectbox(f"Tipo de gráfico {i+1}", ["Líneas", "Barras", "Área", "Boxplot", "Scatter"], key=f"tipo_{i}")
-            x = st.selectbox(f"Eje X {i+1}", df.columns, key=f"x_{i}")
-            y = st.multiselect(f"Ejes Y {i+1}", df.columns, key=f"y_{i}")
-            color = st.color_picker(f"Color base {i+1}", "#1f77b4", key=f"color_{i}")
+        df_grouped = df.groupby(columna_x).agg(**agrupaciones).reset_index()
 
-        with col1:
-            if x and y:
-                df_grouped = df.groupby(x)[y].sum().reset_index()
+        st.write("📋 Datos agrupados:")
+        st.dataframe(df_grouped)
 
-                fig, ax = plt.subplots(figsize=(8, 4))
+        # Crear gráfico
+        fig, ax = plt.subplots(figsize=(10, 5))
 
-                for col in y:
-                    if tipo == "Líneas":
-                        ax.plot(df_grouped[x], df_grouped[col], marker="o", label=col, color=color)
-                    elif tipo == "Barras":
-                        ax.bar(df_grouped[x], df_grouped[col], label=col, color=color)
-                    elif tipo == "Área":
-                        ax.fill_between(df_grouped[x], df_grouped[col], label=col, color=color, alpha=0.4)
-                    elif tipo == "Boxplot":
-                        sns.boxplot(data=df, x=x, y=col, color=color, ax=ax)
-                    elif tipo == "Scatter":
-                        ax.scatter(df_grouped[x], df_grouped[col], label=col, color=color)
+        for col in columnas_y:
+            if tipo_grafico == "📈 Líneas":
+                ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
+            else:
+                ax.bar(df_grouped[columna_x], df_grouped[col], label=col)
 
-                ax.set_title(f"{tipo} - {', '.join(y)} por {x}")
-                ax.set_xlabel(x.capitalize())
-                ax.set_ylabel("Valor")
-                ax.tick_params(axis='x', rotation=45)
-                ax.legend()
-                st.pyplot(fig)
+        ax.set_xlabel(columna_x.capitalize())
+        ax.set_ylabel("Valor")
+        ax.set_title(f"{', '.join(columnas_y)} por {columna_x}")
+        ax.tick_params(axis='x', rotation=45)
+        ax.legend()
+        st.pyplot(fig)
 
-    # Exportar todo a PDF
-    st.markdown("---")
-    st.subheader("📤 Exportar gráficos")
-    if st.button("Descargar como PDF"):
-        from matplotlib.backends.backend_pdf import PdfPages
-        import io
-
+        # Descargar como PDF
         buf = io.BytesIO()
-        with PdfPages(buf) as pdf:
-            for i in range(num_graficos):
-                x = st.session_state.get(f"x_{i}")
-                y = st.session_state.get(f"y_{i}")
-                tipo = st.session_state.get(f"tipo_{i}")
-                color = st.session_state.get(f"color_{i}")
-
-                if x and y:
-                    df_grouped = df.groupby(x)[y].sum().reset_index()
-                    fig, ax = plt.subplots(figsize=(8, 4))
-                    for col in y:
-                        if tipo == "Líneas":
-                            ax.plot(df_grouped[x], df_grouped[col], marker="o", label=col, color=color)
-                        elif tipo == "Barras":
-                            ax.bar(df_grouped[x], df_grouped[col], label=col, color=color)
-                        elif tipo == "Área":
-                            ax.fill_between(df_grouped[x], df_grouped[col], label=col, color=color, alpha=0.4)
-                        elif tipo == "Boxplot":
-                            sns.boxplot(data=df, x=x, y=col, color=color, ax=ax)
-                        elif tipo == "Scatter":
-                            ax.scatter(df_grouped[x], df_grouped[col], label=col, color=color)
-                    ax.set_title(f"{tipo} - {', '.join(y)} por {x}")
-                    ax.set_xlabel(x.capitalize())
-                    ax.set_ylabel("Valor")
-                    ax.legend()
-                    pdf.savefig(fig)
-                    plt.close(fig)
+        fig.savefig(buf, format="pdf")
+        buf.seek(0)
 
         st.download_button(
-            label="📥 Descargar PDF",
-            data=buf.getvalue(),
-            file_name="graficos_dashboard.pdf",
+            label="📥 Descargar gráfico como PDF",
+            data=buf,
+            file_name="grafico_dashboard.pdf",
             mime="application/pdf"
         )
+    else:
+        st.info("Selecciona una columna para eje X y al menos una para eje Y.")
