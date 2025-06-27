@@ -1,93 +1,91 @@
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import streamlit as st
-import io
+import seaborn as sns
+from io import BytesIO
 
-st.set_page_config(layout="wide")
-st.title("📊 Dashboard de Métricas Interactivo (Multi Gráficos)")
+st.set_page_config(page_title="Dashboard Ágil", layout="wide")
 
-archivo = st.file_uploader("Carga tu archivo Excel (.xlsx)", type=["xlsx"])
+st.title("📊 Dashboard Ágil - Métricas de Sprints")
+
+# Subida del archivo
+archivo = st.file_uploader("Sube un archivo Excel", type=["xlsx"])
 
 if archivo:
     df = pd.read_excel(archivo)
-    df.columns = df.columns.str.strip().str.lower()
+    st.success("Archivo cargado correctamente.")
 
-    df = df.rename(columns={
-        'sprint name': 'sprint',
-        'status': 'status',
-        'assignee': 'assignee',
-        'sp': 'sp',
-        'summary': 'summary',
-        'cycle time': 'cycle time'
-    })
+    columnas_disponibles = df.columns.tolist()
 
-    st.write("📋 Columnas detectadas:", df.columns.tolist())
-    st.subheader("Vista previa de los datos")
-    st.dataframe(df)
+    def aplicar_filtros(df, filtros):
+        for col, vals in filtros.items():
+            if vals:
+                df = df[df[col].isin(vals)]
+        return df
 
-    st.sidebar.header("🔍 Filtros generales")
-    if 'sprint' in df.columns:
-        sprints = df['sprint'].dropna().unique().tolist()
-        sprints_seleccionados = st.sidebar.multiselect("Filtrar por Sprint", sprints)
-        if sprints_seleccionados:
-            df = df[df['sprint'].isin(sprints_seleccionados)]
-    if 'status' in df.columns:
-        status_vals = df['status'].dropna().unique().tolist()
-        status_seleccionados = st.sidebar.multiselect("Filtrar por Status", status_vals)
-        if status_seleccionados:
-            df = df[df['status'].isin(status_seleccionados)]
-    if 'assignee' in df.columns:
-        assignees = df['assignee'].dropna().unique().tolist()
-        assignees_seleccionados = st.sidebar.multiselect("Filtrar por Assignee", assignees)
-        if assignees_seleccionados:
-            df = df[df['assignee'].isin(assignees_seleccionados)]
+    # GRAFICO 1
+    st.header("Gráfico 1")
+    with st.expander("🎛️ Configuración Gráfico 1"):
+        filtros_1 = {
+            "sprint": st.multiselect("Filtrar por Sprint (Gráfico 1)", df["sprint"].unique()),
+            "status": st.multiselect("Filtrar por Status (Gráfico 1)", df["status"].unique()),
+            "assignee": st.multiselect("Filtrar por Assignee (Gráfico 1)", df["assignee"].unique()),
+        }
+        tipo_1 = st.selectbox("Tipo de gráfico (Gráfico 1)", ["Barras", "Líneas", "Boxplot"], key="tipo1")
+        x_1 = st.selectbox("Eje X (Gráfico 1)", columnas_disponibles, key="x1")
+        y_1 = st.multiselect("Eje Y (Gráfico 1)", columnas_disponibles, key="y1")
+    df1 = aplicar_filtros(df, filtros_1)
+    
+    # GRAFICO 2
+    st.header("Gráfico 2")
+    with st.expander("🎛️ Configuración Gráfico 2"):
+        filtros_2 = {
+            "sprint": st.multiselect("Filtrar por Sprint (Gráfico 2)", df["sprint"].unique()),
+            "status": st.multiselect("Filtrar por Status (Gráfico 2)", df["status"].unique()),
+            "assignee": st.multiselect("Filtrar por Assignee (Gráfico 2)", df["assignee"].unique()),
+        }
+        tipo_2 = st.selectbox("Tipo de gráfico (Gráfico 2)", ["Barras", "Líneas", "Boxplot"], key="tipo2")
+        x_2 = st.selectbox("Eje X (Gráfico 2)", columnas_disponibles, key="x2")
+        y_2 = st.multiselect("Eje Y (Gráfico 2)", columnas_disponibles, key="y2")
+    df2 = aplicar_filtros(df, filtros_2)
 
-    st.sidebar.header("🎛️ Configuración de gráficos")
-    num_graficos = st.sidebar.slider("¿Cuántos gráficos quieres ver?", 1, 3, 1)
+    # GRAFICO 3
+    st.header("Gráfico 3")
+    with st.expander("🎛️ Configuración Gráfico 3"):
+        filtros_3 = {
+            "sprint": st.multiselect("Filtrar por Sprint (Gráfico 3)", df["sprint"].unique()),
+            "status": st.multiselect("Filtrar por Status (Gráfico 3)", df["status"].unique()),
+            "assignee": st.multiselect("Filtrar por Assignee (Gráfico 3)", df["assignee"].unique()),
+            "label": st.multiselect("Filtrar por Label (Gráfico 3)", df["label"].unique()) if "label" in df.columns else [],
+        }
+        tipo_3 = st.selectbox("Tipo de gráfico (Gráfico 3)", ["Barras", "Líneas", "Boxplot"], key="tipo3")
+        x_3 = st.selectbox("Eje X (Gráfico 3)", columnas_disponibles, key="x3")
+        y_3 = st.multiselect("Eje Y (Gráfico 3)", columnas_disponibles, key="y3")
+    df3 = aplicar_filtros(df, filtros_3)
 
-    for i in range(num_graficos):
-        st.subheader(f"Gráfico {i+1}")
-        st.sidebar.markdown(f"### 🎨 Gráfico {i+1}")
-        tipo_grafico = st.sidebar.selectbox(f"Tipo de gráfico {i+1}", ["📈 Líneas", "📊 Barras"], key=f"tipo_{i}")
-        columna_x = st.sidebar.selectbox(f"Columna X {i+1}", df.columns.tolist(), key=f"x_{i}")
-        columnas_y = st.sidebar.multiselect(f"Columnas Y {i+1}", df.columns.tolist(), key=f"y_{i}")
+    def plot_grafico(df_filtrado, tipo, x_col, y_cols):
+        fig, ax = plt.subplots(figsize=(10,6))
+        for y_col in y_cols:
+            if pd.api.types.is_numeric_dtype(df_filtrado[y_col]):
+                data = df_filtrado.groupby(x_col)[y_col].sum()
+            else:
+                data = df_filtrado.groupby(x_col)[y_col].count()
 
-        if columna_x and columnas_y:
-            agregaciones = {}
-            for col in columnas_y:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    agregaciones[col] = 'sum'
-                else:
-                    agregaciones[col] = lambda x: x.notna().count()
+            if tipo == "Barras":
+                data.plot(kind="bar", ax=ax)
+            elif tipo == "Líneas":
+                data.plot(kind="line", marker="o", ax=ax)
+            elif tipo == "Boxplot":
+                sns.boxplot(x=x_col, y=y_col, data=df_filtrado, ax=ax)
+        ax.set_title(f"{tipo} - {', '.join(y_cols)} por {x_col}")
+        st.pyplot(fig)
+        buf = BytesIO()
+        fig.savefig(buf, format="pdf")
+        st.download_button("📥 Descargar PDF", buf.getvalue(), file_name="grafico.pdf", mime="application/pdf")
 
-            df_grouped = df.groupby(columna_x).agg(agregaciones).reset_index()
-
-            st.write(f"📋 Datos agrupados para Gráfico {i+1}:")
-            st.dataframe(df_grouped)
-
-            fig, ax = plt.subplots(figsize=(10, 5))
-            for col in columnas_y:
-                if tipo_grafico == "📈 Líneas":
-                    ax.plot(df_grouped[columna_x], df_grouped[col], marker='o', label=col)
-                else:
-                    ax.bar(df_grouped[columna_x], df_grouped[col], label=col)
-
-            ax.set_xlabel(columna_x.capitalize())
-            ax.set_ylabel("Valor")
-            ax.set_title(f"{', '.join(columnas_y)} por {columna_x}")
-            ax.tick_params(axis='x', rotation=45)
-            ax.legend()
-            st.pyplot(fig)
-
-            buf = io.BytesIO()
-            fig.savefig(buf, format="pdf")
-            buf.seek(0)
-
-            st.download_button(
-                label=f"📥 Descargar gráfico {i+1} como PDF",
-                data=buf,
-                file_name=f"grafico_{i+1}.pdf",
-                mime="application/pdf"
-            )
-        else:
-            st.info(f"Selecciona X y Y para el gráfico {i+1}.")
+    if y_1:
+        plot_grafico(df1, tipo_1, x_1, y_1)
+    if y_2:
+        plot_grafico(df2, tipo_2, x_2, y_2)
+    if y_3:
+        plot_grafico(df3, tipo_3, x_3, y_3)
