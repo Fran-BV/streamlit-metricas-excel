@@ -8,28 +8,33 @@ uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    
+
     # Limpiamos nombres de columnas
     df.columns = df.columns.str.strip().str.lower()
-
     st.write("Columnas detectadas:", df.columns.tolist())
 
-    # Verificamos columnas necesarias
+    # Renombrar columnas si es necesario (corrige errores comunes)
+    rename_dict = {
+        "status": "estado",
+        "story point": "story points",
+        "storypoint": "story points",
+    }
+    df.rename(columns=rename_dict, inplace=True)
+
+    # Validación de columnas necesarias
     required_columns = ["sprint", "estado", "summary", "story points", "label"]
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
         st.error(f"El archivo no contiene las siguientes columnas necesarias: {missing_columns}")
     else:
-        # Filtros generales
-        sprints = st.multiselect(
-            "Filtrar por Sprint (Gráfico 1 y 2)",
-            df["sprint"].dropna().unique()
-        )
-        estados = st.multiselect(
-            "Filtrar por Estado (Gráfico 1 y 2)",
-            df["estado"].dropna().unique()
-        )
+        # Normalizamos story points
+        df["story points"] = pd.to_numeric(df["story points"], errors="coerce")
+        df.dropna(subset=["story points"], inplace=True)
+
+        # Filtros
+        sprints = st.multiselect("Filtrar por Sprint", sorted(df["sprint"].dropna().unique()))
+        estados = st.multiselect("Filtrar por Estado", sorted(df["estado"].dropna().unique()))
 
         df_filtrado = df.copy()
         if sprints:
@@ -37,26 +42,29 @@ if uploaded_file:
         if estados:
             df_filtrado = df_filtrado[df_filtrado["estado"].isin(estados)]
 
-        # Gráfico 1: Conteo de items por sprint
-        st.subheader("Gráfico 1: Conteo de items por Sprint")
+        # Gráfico 1: Conteo de items por Sprint
+        st.subheader("Gráfico 1: Conteo de Items por Sprint")
         fig1, ax1 = plt.subplots()
-        df_filtrado.groupby("sprint")["summary"].count().plot(kind="bar", ax=ax1)
-        ax1.set_ylabel("Cantidad de items")
+        conteo = df_filtrado.groupby("sprint")["summary"].count().sort_index()
+        bars = ax1.bar(conteo.index, conteo.values, color="skyblue")
+        ax1.set_ylabel("Cantidad de Items")
+        ax1.set_title("Cantidad de Items por Sprint")
+        ax1.bar_label(bars)
         st.pyplot(fig1)
 
-        # Gráfico 2: Sumatoria de story points por sprint
+        # Gráfico 2: Story Points por Sprint
         st.subheader("Gráfico 2: Sumatoria de Story Points por Sprint")
         fig2, ax2 = plt.subplots()
-        df_filtrado.groupby("sprint")["story points"].sum().plot(kind="bar", color="green", ax=ax2)
+        suma_sp = df_filtrado.groupby("sprint")["story points"].sum().sort_index()
+        bars2 = ax2.bar(suma_sp.index, suma_sp.values, color="green")
         ax2.set_ylabel("Story Points")
+        ax2.set_title("Story Points por Sprint")
+        ax2.bar_label(bars2)
         st.pyplot(fig2)
 
-        # Gráfico 3: Boxplot por label
+        # Gráfico 3: Distribución SP por Label
         st.subheader("Gráfico 3: Boxplot de Story Points por Label")
-        labels = st.multiselect(
-            "Filtrar por Label (Gráfico 3)",
-            df["label"].dropna().unique()
-        )
+        labels = st.multiselect("Filtrar por Label", sorted(df["label"].dropna().unique()))
         df_box = df.copy()
         if labels:
             df_box = df_box[df_box["label"].isin(labels)]
@@ -68,3 +76,42 @@ if uploaded_file:
             st.pyplot(fig3)
         else:
             st.info("No hay datos para mostrar en el boxplot con los filtros seleccionados.")
+
+        # Gráfico 4: Porcentaje de tareas por Estado por Sprint
+        st.subheader("Gráfico 4: % de Tareas por Estado por Sprint")
+        pivot_estado = pd.crosstab(df_filtrado["sprint"], df_filtrado["estado"], normalize="index") * 100
+        fig4, ax4 = plt.subplots()
+        pivot_estado.plot(kind="bar", stacked=True, ax=ax4, colormap="tab20")
+        ax4.set_ylabel("% de Tareas")
+        ax4.set_title("Distribución Porcentual de Estados por Sprint")
+        st.pyplot(fig4)
+
+        # Gráfico 5: Started vs Done por Sprint
+        st.subheader("Gráfico 5: Started vs Done por Sprint")
+
+        started_statuses = [
+            "in progress", "code review", "ready to deploy", "waiting 3rd party", "resolved", "done"
+        ]
+        done_statuses = [
+            "ready to deploy", "resolved", "done"
+        ]
+
+        df["estado"] = df["estado"].str.lower().str.strip()
+
+        started_df = df[df["estado"].isin(started_statuses)]
+        done_df = df[df["estado"].isin(done_statuses)]
+
+        started_count = started_df.groupby("sprint")["summary"].count()
+        done_count = done_df.groupby("sprint")["summary"].count()
+
+        combined = pd.DataFrame({
+            "Started": started_count,
+            "Done": done_count
+        }).fillna(0).sort_index()
+
+        fig5, ax5 = plt.subplots()
+        combined.plot(kind="bar", ax=ax5)
+        ax5.set_ylabel("Cantidad de Items")
+        ax5.set_title("Comparativa Started vs Done por Sprint")
+        ax5.legend(["Started", "Done"])
+        st.pyplot(fig5)
