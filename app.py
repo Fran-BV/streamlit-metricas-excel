@@ -9,17 +9,19 @@ uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Limpiamos nombres de columnas
+    # Limpieza y estandarización de nombres de columnas
     df.columns = df.columns.str.strip().str.lower()
-    st.write("Columnas detectadas:", df.columns.tolist())
 
-    # Renombrar columnas si es necesario (corrige errores comunes)
+    # Mapeo de nombres comunes de columnas a estándar esperado
     rename_dict = {
         "status": "estado",
         "story point": "story points",
         "storypoint": "story points",
+        "sp": "story points",  # Agregado para tu caso
     }
     df.rename(columns=rename_dict, inplace=True)
+
+    st.write("Columnas detectadas (tras limpieza):", df.columns.tolist())
 
     # Validación de columnas necesarias
     required_columns = ["sprint", "estado", "summary", "story points", "label"]
@@ -28,11 +30,12 @@ if uploaded_file:
     if missing_columns:
         st.error(f"El archivo no contiene las siguientes columnas necesarias: {missing_columns}")
     else:
-        # Normalizamos story points
+        # Limpieza de datos
         df["story points"] = pd.to_numeric(df["story points"], errors="coerce")
         df.dropna(subset=["story points"], inplace=True)
+        df["estado"] = df["estado"].str.lower().str.strip()
 
-        # Filtros
+        # Filtros interactivos
         sprints = st.multiselect("Filtrar por Sprint", sorted(df["sprint"].dropna().unique()))
         estados = st.multiselect("Filtrar por Estado", sorted(df["estado"].dropna().unique()))
 
@@ -42,7 +45,7 @@ if uploaded_file:
         if estados:
             df_filtrado = df_filtrado[df_filtrado["estado"].isin(estados)]
 
-        # Gráfico 1: Conteo de items por Sprint
+        # Gráfico 1: Conteo de Items por Sprint
         st.subheader("Gráfico 1: Conteo de Items por Sprint")
         fig1, ax1 = plt.subplots()
         conteo = df_filtrado.groupby("sprint")["summary"].count().sort_index()
@@ -62,7 +65,7 @@ if uploaded_file:
         ax2.bar_label(bars2)
         st.pyplot(fig2)
 
-        # Gráfico 3: Distribución SP por Label
+        # Gráfico 3: Boxplot por Label
         st.subheader("Gráfico 3: Boxplot de Story Points por Label")
         labels = st.multiselect("Filtrar por Label", sorted(df["label"].dropna().unique()))
         df_box = df.copy()
@@ -92,11 +95,7 @@ if uploaded_file:
         started_statuses = [
             "in progress", "code review", "ready to deploy", "waiting 3rd party", "resolved", "done"
         ]
-        done_statuses = [
-            "ready to deploy", "resolved", "done"
-        ]
-
-        df["estado"] = df["estado"].str.lower().str.strip()
+        done_statuses = ["ready to deploy", "resolved", "done"]
 
         started_df = df[df["estado"].isin(started_statuses)]
         done_df = df[df["estado"].isin(done_statuses)]
