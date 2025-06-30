@@ -44,28 +44,33 @@ if uploaded_file:
         if estados:
             df_filtrado = df_filtrado[df_filtrado["estado"].isin(estados)]
 
-        # ========== Gráfico 1+2 Combinado ==========
-        st.subheader("📊 Cantidad de Tareas y Story Points por Sprint")
-        fig, ax1 = plt.subplots(figsize=(10, 5))
+        # ========== Gráfico 1: Cantidad de Tareas y Story Points (eje Y compartido) ==========
+        st.subheader("📊 Cantidad de Tareas y Story Points por Sprint (eje Y compartido)")
 
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+        # Agrupaciones
         tareas_por_sprint = df_filtrado.groupby("sprint")["summary"].count().sort_index()
         sp_por_sprint = df_filtrado.groupby("sprint")["story points"].sum().sort_index()
 
-        ax2 = ax1.twinx()
-        line1 = ax1.plot(tareas_por_sprint.index, tareas_por_sprint.values, color='tab:blue', marker='o', label='Cantidad de Tareas')
-        line2 = ax2.plot(sp_por_sprint.index, sp_por_sprint.values, color='tab:green', marker='s', label='Story Points')
+        # Escalado opcional (si SP son mucho más grandes)
+        # Puedes descomentar esta línea si los valores son muy distintos
+        # sp_por_sprint = sp_por_sprint / sp_por_sprint.max() * tareas_por_sprint.max()
 
-        ax1.set_ylabel("Cantidad de Tareas", color='tab:blue')
-        ax2.set_ylabel("Story Points", color='tab:green')
-        ax1.set_xlabel("Sprint")
-        ax1.tick_params(axis='x', rotation=45)
-        ax1.grid(True)
+        # Gráfico de líneas
+        ax.plot(tareas_por_sprint.index, tareas_por_sprint.values, marker='o', label='Cantidad de Tareas', color='tab:blue')
+        ax.plot(sp_por_sprint.index, sp_por_sprint.values, marker='s', label='Story Points', color='tab:green')
 
-        lines = line1 + line2
-        labels = [l.get_label() for l in lines]
-        ax1.legend(lines, labels, loc='upper left')
+        # Estética
+        ax.set_ylabel("Cantidad")
+        ax.set_xlabel("Sprint")
+        ax.set_title("Cantidad de Tareas y Story Points por Sprint (Mismo eje Y)")
+        ax.legend()
+        ax.grid(True)
+        ax.tick_params(axis='x', rotation=45)
 
         st.pyplot(fig)
+
 
         # ========== Gráfico 3 (nuevo): % Label por Sprint ==========
         st.subheader("📦 Distribución porcentual de Labels por Sprint (BAU, Roadmap, Tech_tasks)")
