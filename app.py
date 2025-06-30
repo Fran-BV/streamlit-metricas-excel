@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(layout="wide")  # Mejor distribución en pantalla
 st.title("Métricas de Excel")
+st.info("🔄 Código actualizado el 30/06/2025")
 
 uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
 
