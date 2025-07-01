@@ -2,16 +2,16 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-st.set_page_config(layout="wide")  # Mejor distribución en pantalla
-st.title("Métricas de Excel")
-st.info("🔄 Código actualizado el 30/06/2025")
+st.set_page_config(layout="wide")
+st.title("📈 Métricas de Excel")
+st.caption("🔄 Código actualizado el 30/06/2025")
 
 uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Limpieza y normalización de columnas
+    # Limpieza y normalización
     df.columns = df.columns.str.strip().str.lower()
     rename_dict = {
         "status": "estado",
@@ -21,13 +21,13 @@ if uploaded_file:
     }
     df.rename(columns=rename_dict, inplace=True)
 
-    st.write("Columnas detectadas (tras limpieza):", df.columns.tolist())
+    st.write("📌 **Columnas detectadas (tras limpieza):**", df.columns.tolist())
 
     required_columns = ["sprint", "estado", "summary", "story points", "label"]
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
-        st.error(f"Faltan las siguientes columnas necesarias: {missing_columns}")
+        st.error(f"⚠️ Faltan las siguientes columnas necesarias: {missing_columns}")
     else:
         df["story points"] = pd.to_numeric(df["story points"], errors="coerce")
         df.dropna(subset=["story points"], inplace=True)
@@ -44,92 +44,119 @@ if uploaded_file:
         if estados:
             df_filtrado = df_filtrado[df_filtrado["estado"].isin(estados)]
 
-        # ========== Gráfico 1: Cantidad de Tareas y Story Points (eje Y compartido) ==========
-        st.subheader("📊 Cantidad de Tareas y Story Points por Sprint (eje Y compartido)")
+        st.caption(f"📂 Filtros aplicados → Sprint: {sprints if sprints else 'Todos'}, Estado: {estados if estados else 'Todos'}")
 
-        fig, ax = plt.subplots(figsize=(10, 5))
-
-        # Agrupaciones
-        tareas_por_sprint = df_filtrado.groupby("sprint")["summary"].count().sort_index()
-        sp_por_sprint = df_filtrado.groupby("sprint")["story points"].sum().sort_index()
-
-        # Escalado opcional (si SP son mucho más grandes)
-        # Puedes descomentar esta línea si los valores son muy distintos
-        # sp_por_sprint = sp_por_sprint / sp_por_sprint.max() * tareas_por_sprint.max()
-
-        # Gráfico de líneas
-        ax.plot(tareas_por_sprint.index, tareas_por_sprint.values, marker='o', label='Cantidad de Tareas', color='tab:blue')
-        ax.plot(sp_por_sprint.index, sp_por_sprint.values, marker='s', label='Story Points', color='tab:green')
-
-        # Estética
-        ax.set_ylabel("Cantidad")
-        ax.set_xlabel("Sprint")
-        ax.set_title("Cantidad de Tareas y Story Points por Sprint (Mismo eje Y)")
-        ax.legend()
-        ax.grid(True)
-        ax.tick_params(axis='x', rotation=45)
-
-        st.pyplot(fig)
-
-
-        # ========== Gráfico 3 (nuevo): % Label por Sprint ==========
-        st.subheader("📦 Distribución porcentual de Labels por Sprint (BAU, Roadmap, Tech_tasks)")
-        df_label = df_filtrado[df_filtrado["label"].isin(["BAU", "Roadmap", "Tech_tasks"])]
-        if not df_label.empty:
-            pivot_label = pd.crosstab(df_label["sprint"], df_label["label"], normalize="index") * 100
-            fig3, ax3 = plt.subplots(figsize=(10, 5))
-            pivot_label.plot(kind="bar", stacked=True, ax=ax3, colormap="Pastel1")
-            ax3.set_ylabel("% de Tareas")
-            ax3.set_title("Distribución de Labels por Sprint")
-            ax3.tick_params(axis='x', rotation=45)
-            st.pyplot(fig3)
+        if df_filtrado.empty:
+            st.warning("⚠️ No hay datos para mostrar con los filtros seleccionados.")
         else:
-            st.info("No se encontraron Labels BAU, Roadmap o Tech_tasks en los datos filtrados.")
+            st.download_button(
+                "⬇️ Descargar datos filtrados",
+                df_filtrado.to_csv(index=False).encode("utf-8"),
+                "datos_filtrados.csv",
+                "text/csv"
+            )
 
-        # ========== Gráfico 4: Estados agrupados ==========
-        st.subheader("🪧 Distribución de Estados (ToDo, In Progress, Finished) por Sprint")
+            # ===== Gráficos =====
+            col1, col2 = st.columns(2)
 
-        estado_mapeado = {
-            "to do": "ToDo",
-            "in progress": "In Progress",
-            "code review": "In Progress",
-            "waiting 3rd party": "In Progress",
-            "qa": "In Progress",
-            "ready to deploy": "Finished",
-            "done": "Finished",
-            "resolved": "Finished",
-            "ready": "Finished"
-        }
+            # Gráfico 1
+            with col1:
+                st.markdown("### 📊 Cantidad de Tareas y Story Points")
+                fig, ax = plt.subplots(figsize=(6, 3))
 
-        df_estado = df_filtrado.copy()
-        df_estado["estado_mapeado"] = df_estado["estado"].map(estado_mapeado).fillna("Otros")
+                tareas_por_sprint = df_filtrado.groupby("sprint")["summary"].count().sort_index()
+                sp_por_sprint = df_filtrado.groupby("sprint")["story points"].sum().sort_index()
 
-        pivot_estado = pd.crosstab(df_estado["sprint"], df_estado["estado_mapeado"], normalize="index") * 100
-        fig4, ax4 = plt.subplots(figsize=(10, 5))
-        pivot_estado.plot(kind="bar", stacked=True, ax=ax4, colormap="Set3")
-        ax4.set_ylabel("% de Tareas")
-        ax4.set_title("Estados agrupados por Sprint")
-        ax4.tick_params(axis='x', rotation=45)
-        st.pyplot(fig4)
+                ax.plot(tareas_por_sprint.index, tareas_por_sprint.values, marker='o', label='Tareas', color='tab:blue')
+                ax.plot(sp_por_sprint.index, sp_por_sprint.values, marker='s', label='Story Points', color='tab:green')
 
-        # ========== Gráfico 5: Started vs Done ==========
-        st.subheader("🏁 Started vs Done por Sprint")
+                ax.set_ylabel("Cantidad", fontsize=8)
+                ax.set_xlabel("Sprint", fontsize=8)
+                ax.set_title("Tareas y Story Points por Sprint", fontsize=10)
+                ax.legend(fontsize=6)
+                ax.grid(True, linestyle="--", alpha=0.5)
+                ax.tick_params(axis='x', rotation=45, labelsize=7)
+                ax.tick_params(axis='y', labelsize=7)
 
-        started_df = df[df["estado"] != "to do"]
-        done_df = df[df["estado"].isin(["ready to deploy", "done", "resolved", "ready"])]
+                st.pyplot(fig)
+                st.dataframe(pd.DataFrame({"Tareas": tareas_por_sprint, "Story Points": sp_por_sprint}))
 
-        started_count = started_df.groupby("sprint")["summary"].count()
-        done_count = done_df.groupby("sprint")["summary"].count()
+            # Gráfico 2
+            with col2:
+                st.markdown("### 📦 % Labels por Sprint")
+                df_label = df_filtrado[df_filtrado["label"].isin(["BAU", "Roadmap", "Tech_tasks"])]
+                if not df_label.empty:
+                    pivot_label = pd.crosstab(df_label["sprint"], df_label["label"], normalize="index") * 100
+                    fig2, ax2 = plt.subplots(figsize=(6, 3))
+                    pivot_label.plot(kind="bar", stacked=True, ax=ax2, colormap="Pastel1")
 
-        combined = pd.DataFrame({
-            "Started": started_count,
-            "Done": done_count
-        }).fillna(0).sort_index()
+                    ax2.set_ylabel("%", fontsize=8)
+                    ax2.set_title("% Labels (BAU, Roadmap, Tech_tasks)", fontsize=10)
+                    ax2.tick_params(axis='x', rotation=45, labelsize=7)
+                    ax2.tick_params(axis='y', labelsize=7)
+                    ax2.legend(fontsize=6)
 
-        fig5, ax5 = plt.subplots(figsize=(10, 5))
-        combined.plot(kind="bar", ax=ax5, width=0.7, color=["#1f77b4", "#2ca02c"])
-        ax5.set_ylabel("Cantidad de Items")
-        ax5.set_title("Started vs Done por Sprint")
-        ax5.legend(loc="upper left")
-        ax5.tick_params(axis='x', rotation=45)
-        st.pyplot(fig5)
+                    st.pyplot(fig2)
+                    st.dataframe(pivot_label.round(2))
+                else:
+                    st.info("ℹ️ No se encontraron Labels BAU, Roadmap o Tech_tasks en los datos filtrados.")
+
+            col3, col4 = st.columns(2)
+
+            # Gráfico 3
+            with col3:
+                st.markdown("### 🪧 Estados agrupados por Sprint")
+                estado_mapeado = {
+                    "to do": "ToDo",
+                    "in progress": "In Progress",
+                    "code review": "In Progress",
+                    "waiting 3rd party": "In Progress",
+                    "qa": "In Progress",
+                    "ready to deploy": "Finished",
+                    "done": "Finished",
+                    "resolved": "Finished",
+                    "ready": "Finished"
+                }
+
+                df_estado = df_filtrado.copy()
+                df_estado["estado_mapeado"] = df_estado["estado"].map(estado_mapeado).fillna("Otros")
+
+                pivot_estado = pd.crosstab(df_estado["sprint"], df_estado["estado_mapeado"], normalize="index") * 100
+                fig3, ax3 = plt.subplots(figsize=(6, 3))
+                pivot_estado.plot(kind="bar", stacked=True, ax=ax3, colormap="Set3")
+
+                ax3.set_ylabel("%", fontsize=8)
+                ax3.set_title("Estados agrupados", fontsize=10)
+                ax3.tick_params(axis='x', rotation=45, labelsize=7)
+                ax3.tick_params(axis='y', labelsize=7)
+                ax3.legend(fontsize=6)
+
+                st.pyplot(fig3)
+                st.dataframe(pivot_estado.round(2))
+
+            # Gráfico 4
+            with col4:
+                st.markdown("### 🏁 Started vs Done por Sprint")
+
+                started_df = df_filtrado[df_filtrado["estado"] != "to do"]
+                done_df = df_filtrado[df_filtrado["estado"].isin(["ready to deploy", "done", "resolved", "ready"])]
+
+                started_count = started_df.groupby("sprint")["summary"].count()
+                done_count = done_df.groupby("sprint")["summary"].count()
+
+                combined = pd.DataFrame({
+                    "Started": started_count,
+                    "Done": done_count
+                }).fillna(0).sort_index()
+
+                fig4, ax4 = plt.subplots(figsize=(6, 3))
+                combined.plot(kind="bar", ax=ax4, width=0.7, color=["#1f77b4", "#2ca02c"])
+
+                ax4.set_ylabel("Cantidad", fontsize=8)
+                ax4.set_title("Started vs Done", fontsize=10)
+                ax4.tick_params(axis='x', rotation=45, labelsize=7)
+                ax4.tick_params(axis='y', labelsize=7)
+                ax4.legend(fontsize=6)
+
+                st.pyplot(fig4)
+                st.dataframe(combined.astype(int))
