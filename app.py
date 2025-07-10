@@ -1,13 +1,3 @@
-import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-
-st.set_page_config(layout="wide")
-st.title("Métricas de Excel")
-st.caption("🔄 Código actualizado el 30/06/2025")
-
-uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
-
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
@@ -34,8 +24,12 @@ if uploaded_file:
         df["estado"] = df["estado"].astype(str).str.strip().str.lower()
         df["label"] = df["label"].apply(lambda x: str(x).strip() if pd.notnull(x) else x)
 
+        # 🧠 Agregar columna numérica para orden correcto
+        df["sprint_num"] = df["sprint"].astype(str).str.extract(r"(\d+)").astype(int)
+        df = df.sort_values("sprint_num")
+
         # Filtros
-        sprints = st.multiselect("Filtrar por Sprint", sorted(df["sprint"].dropna().unique()))
+        sprints = st.multiselect("Filtrar por Sprint", sorted(df["sprint"].dropna().unique(), key=lambda x: int(str(x).split()[-1])))
         estados = st.multiselect("Filtrar por Estado", sorted(df["estado"].dropna().unique()))
 
         df_filtrado = df.copy()
@@ -49,12 +43,14 @@ if uploaded_file:
 
         col1, col2 = st.columns(2)
 
-        # ========== Gráfico 1 ==========
+        # ========== Gráfico 1 ========== (Tareas y SP por sprint ordenados)
         with col1:
             st.subheader("📊 Tareas y SP finalizados por Sprint")
             finalizado_df = df_filtrado[df_filtrado["estado"].isin(estados_finalizados)]
-            tareas = finalizado_df.groupby("sprint")["summary"].count().sort_index()
-            sps = finalizado_df.groupby("sprint")["story points"].sum().sort_index()
+            finalizado_df = finalizado_df.sort_values("sprint_num")
+
+            tareas = finalizado_df.groupby("sprint")["summary"].count()
+            sps = finalizado_df.groupby("sprint")["story points"].sum()
 
             fig, ax = plt.subplots(figsize=(5, 4))
             ax.plot(tareas.index, tareas.values, marker='o', label='Tareas Finalizadas', color='tab:blue')
@@ -73,15 +69,15 @@ if uploaded_file:
             ax.tick_params(axis='x', rotation=45)
             st.pyplot(fig)
 
-        # ========== Gráfico 2 ==========
+        # ========== Gráfico 2 ========== (Distribución de Labels)
         with col2:
             st.subheader("📦 Distribución de Labels (%)")
             labels_unicos = df_filtrado["label"].dropna().unique()
-            df_label = df_filtrado[df_filtrado["label"].isin(labels_unicos)]
+            df_label = df_filtrado[df_filtrado["label"].isin(labels_unicos)].sort_values("sprint_num")
             if not df_label.empty:
                 pivot_label = pd.crosstab(df_label["sprint"], df_label["label"], normalize="index") * 100
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
-                bars = pivot_label.plot(kind="bar", stacked=True, ax=ax2, colormap="Pastel1", legend=False)
+                pivot_label.plot(kind="bar", stacked=True, ax=ax2, colormap="Pastel1", legend=False)
 
                 for container in ax2.containers:
                     ax2.bar_label(container, fmt='%.1f%%', fontsize=7, label_type='center')
@@ -94,8 +90,7 @@ if uploaded_file:
             else:
                 st.info("No hay labels en los datos filtrados.")
 
-        # ========== Gráfico 3 ==========
-        col3, col4 = st.columns(2)
+        # ========== Gráfico 3 ========== (Estados agrupados)
         with col3:
             st.subheader("🪧 Estados agrupados (%)")
             estado_mapeado = {
@@ -112,6 +107,7 @@ if uploaded_file:
 
             df_estado = df_filtrado.copy()
             df_estado["estado_mapeado"] = df_estado["estado"].map(estado_mapeado).fillna("Otros")
+            df_estado = df_estado.sort_values("sprint_num")
 
             pivot_estado = pd.crosstab(df_estado["sprint"], df_estado["estado_mapeado"], normalize="index") * 100
             fig3, ax3 = plt.subplots(figsize=(5, 4))
@@ -126,11 +122,14 @@ if uploaded_file:
             ax3.legend(title="Estado", bbox_to_anchor=(1,1), fontsize=7)
             st.pyplot(fig3)
 
-        # ========== Gráfico 4 ==========
+        # ========== Gráfico 4 ========== (Started vs Done)
         with col4:
             st.subheader("🏁 Started vs Done")
             started_df = df_filtrado[df_filtrado["estado"] != "to do"]
             done_df = df_filtrado[df_filtrado["estado"].isin(estados_finalizados)]
+
+            started_df = started_df.sort_values("sprint_num")
+            done_df = done_df.sort_values("sprint_num")
 
             started_count = started_df.groupby("sprint")["summary"].count()
             done_count = done_df.groupby("sprint")["summary"].count()
@@ -138,7 +137,9 @@ if uploaded_file:
             combined = pd.DataFrame({
                 "Started": started_count,
                 "Done": done_count
-            }).fillna(0).sort_index()
+            }).fillna(0)
+
+            combined = combined.loc[sorted(combined.index, key=lambda x: int(str(x).split()[-1]))]
 
             fig4, ax4 = plt.subplots(figsize=(5, 4))
             combined.plot(kind="bar", ax=ax4, width=0.7, color=["#1f77b4", "#2ca02c"], legend=False)
