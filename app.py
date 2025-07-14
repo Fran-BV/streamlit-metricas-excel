@@ -1,3 +1,14 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+
+st.set_page_config(layout="wide")
+st.title("📈 Métricas desde Excel")
+st.caption("🔄 Código actualizado el 30/06/2025")
+
+# ✅ Uploader antes de usar la variable
+uploaded_file = st.file_uploader("Sube un archivo Excel", type="xlsx")
+
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
@@ -24,7 +35,7 @@ if uploaded_file:
         df["estado"] = df["estado"].astype(str).str.strip().str.lower()
         df["label"] = df["label"].apply(lambda x: str(x).strip() if pd.notnull(x) else x)
 
-        # 🧠 Agregar columna numérica para orden correcto
+        # Agregar columna numérica para orden correcto
         df["sprint_num"] = df["sprint"].astype(str).str.extract(r"(\d+)").astype(int)
         df = df.sort_values("sprint_num")
 
@@ -38,16 +49,14 @@ if uploaded_file:
         if estados:
             df_filtrado = df_filtrado[df_filtrado["estado"].isin(estados)]
 
-        # Estado finalizado
         estados_finalizados = ["ready to deploy", "done", "resolved", "ready"]
 
         col1, col2 = st.columns(2)
 
-        # ========== Gráfico 1 ========== (Tareas y SP por sprint ordenados)
+        # Gráfico 1: Tareas y SP finalizados por sprint
         with col1:
             st.subheader("📊 Tareas y SP finalizados por Sprint")
-            finalizado_df = df_filtrado[df_filtrado["estado"].isin(estados_finalizados)]
-            finalizado_df = finalizado_df.sort_values("sprint_num")
+            finalizado_df = df_filtrado[df_filtrado["estado"].isin(estados_finalizados)].sort_values("sprint_num")
 
             tareas = finalizado_df.groupby("sprint")["summary"].count()
             sps = finalizado_df.groupby("sprint")["story points"].sum()
@@ -69,11 +78,12 @@ if uploaded_file:
             ax.tick_params(axis='x', rotation=45)
             st.pyplot(fig)
 
-        # ========== Gráfico 2 ========== (Distribución de Labels)
+        # Gráfico 2: Distribución de Labels
         with col2:
             st.subheader("📦 Distribución de Labels (%)")
             labels_unicos = df_filtrado["label"].dropna().unique()
             df_label = df_filtrado[df_filtrado["label"].isin(labels_unicos)].sort_values("sprint_num")
+
             if not df_label.empty:
                 pivot_label = pd.crosstab(df_label["sprint"], df_label["label"], normalize="index") * 100
                 fig2, ax2 = plt.subplots(figsize=(5, 4))
@@ -90,7 +100,10 @@ if uploaded_file:
             else:
                 st.info("No hay labels en los datos filtrados.")
 
-        # ========== Gráfico 3 ========== (Estados agrupados)
+        # Layout para gráficos 3 y 4
+        col3, col4 = st.columns(2)
+
+        # Gráfico 3: Estados agrupados
         with col3:
             st.subheader("🪧 Estados agrupados (%)")
             estado_mapeado = {
@@ -122,7 +135,7 @@ if uploaded_file:
             ax3.legend(title="Estado", bbox_to_anchor=(1,1), fontsize=7)
             st.pyplot(fig3)
 
-        # ========== Gráfico 4 ========== (Started vs Done)
+        # Gráfico 4: Started vs Done
         with col4:
             st.subheader("🏁 Started vs Done")
             started_df = df_filtrado[df_filtrado["estado"] != "to do"]
